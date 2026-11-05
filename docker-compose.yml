@@ -1,0 +1,37 @@
+services:
+  katalog-service:
+    build: ./katalog-service
+    environment: { PORT: 3001 }
+    restart: unless-stopped
+  pelanggan-service:
+    build: ./pelanggan-service
+    environment:
+      PORT: 3002
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret}
+    restart: unless-stopped
+  pembayaran-service:
+    build: ./pembayaran-service
+    environment:
+      PORT: 3004
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret}
+    restart: unless-stopped
+  order-service:
+    build: ./order-service
+    environment:
+      PORT: 3003
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret}
+      CATALOG_URL: http://katalog-service:3001
+      PAYMENT_URL: http://pembayaran-service:3004
+    depends_on: [katalog-service, pembayaran-service, pelanggan-service]
+    restart: unless-stopped
+  gateway:
+    build: ./gateway
+    environment:
+      PORT: 8080
+      CATALOG_URL: http://katalog-service:3001
+      CUSTOMER_URL: http://pelanggan-service:3002
+      ORDER_URL: http://order-service:3003
+      PAYMENT_URL: http://pembayaran-service:3004
+    ports: ["8080:8080"]
+    depends_on: [katalog-service, pelanggan-service, order-service, pembayaran-service]
+    restart: unless-stopped

@@ -1,0 +1,14 @@
+const express = require('express'); const jwt = require('jsonwebtoken'); const crypto = require('node:crypto');
+const app=express(); app.use(express.json()); const secret=process.env.JWT_SECRET||'dev-only-change-this-secret'; const users=[];
+function hash(p,s=crypto.randomBytes(16).toString('hex')){return `${s}:${crypto.scryptSync(p,s,64).toString('hex')}`;}
+function match(p,h){const [s,v]=h.split(':');return crypto.timingSafeEqual(Buffer.from(crypto.scryptSync(p,s,64).toString('hex'),'hex'),Buffer.from(v,'hex'));}
+users.push({id:'U001',name:'Admin Toko',email:'admin@tokokita.local',password:hash('Admin123!'),role:'admin',addresses:['Jl. Merdeka No. 1']});
+users.push({id:'U002',name:'Pelanggan Demo',email:'demo@tokokita.local',password:hash('Demo123!'),role:'customer',addresses:['Jl. Contoh No. 10']});
+function auth(req,res,next){const h=req.headers.authorization||''; try{req.user=jwt.verify(h.replace(/^Bearer\s+/i,''),secret);next();}catch{return res.status(401).json({error:'Token tidak valid atau kedaluwarsa'});}}
+app.get('/health',(q,s)=>s.json({service:'pelanggan-service',status:'ok'}));
+app.post('/register',(req,res)=>{const {name,email,password}=req.body||{}; if(!name||!email||!password||password.length<8)return res.status(400).json({error:'Nama, email, dan password minimal 8 karakter wajib diisi'}); if(users.some(u=>u.email.toLowerCase()===email.toLowerCase()))return res.status(409).json({error:'Email sudah terdaftar'}); const user={id:'U'+String(Date.now()),name,email:email.toLowerCase(),password:hash(password),role:'customer',addresses:[]}; users.push(user); const token=jwt.sign({id:user.id,email:user.email,role:user.role},secret,{expiresIn:'8h'});res.status(201).json({token,user:{id:user.id,name:user.name,email:user.email,role:user.role,addresses:user.addresses}});});
+app.post('/login',(req,res)=>{const {email,password}=req.body||{}; const u=users.find(x=>x.email===(email||'').toLowerCase()); if(!u||!password||!match(password,u.password))return res.status(401).json({error:'Email atau password salah'});const token=jwt.sign({id:u.id,email:u.email,role:u.role},secret,{expiresIn:'8h'});res.json({token,user:{id:u.id,name:u.name,email:u.email,role:u.role,addresses:u.addresses}});});
+app.post('/verify',auth,(req,res)=>res.json({valid:true,user:req.user}));
+app.get('/profile',auth,(req,res)=>{const u=users.find(x=>x.id===req.user.id);if(!u)return res.status(404).json({error:'Pelanggan tidak ditemukan'});res.json({id:u.id,name:u.name,email:u.email,role:u.role,addresses:u.addresses});});
+app.put('/profile/addresses',auth,(req,res)=>{const u=users.find(x=>x.id===req.user.id); const address=(req.body||{}).address; if(!address)return res.status(400).json({error:'Alamat wajib diisi'});u.addresses.push(address);res.json({addresses:u.addresses});});
+app.listen(process.env.PORT||3002,()=>console.log('pelanggan-service ready'));
